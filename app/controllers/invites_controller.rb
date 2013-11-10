@@ -1,7 +1,9 @@
 class InvitesController < ApplicationController
 
-  skip_before_filter :check_xhr, :check_restricted_access
-  before_filter :ensure_logged_in, only: [:destroy]
+  skip_before_filter :check_xhr
+  skip_before_filter :redirect_to_login_if_required
+
+  before_filter :ensure_logged_in, only: [:destroy, :create]
 
   def show
     invite = Invite.where(invite_key: params[:id]).first
@@ -14,9 +16,6 @@ class InvitesController < ApplicationController
         # Send a welcome message if required
         user.enqueue_welcome_message('welcome_invite') if user.send_welcome_message
 
-        # We skip the access password if we come in via an invite link
-        cookies.permanent['_access'] = SiteSetting.access_password if SiteSetting.access_password.present?
-
         topic = invite.topics.first
         if topic.present?
           redirect_to "#{Discourse.base_uri}#{topic.relative_url}"
@@ -25,15 +24,27 @@ class InvitesController < ApplicationController
       end
     end
 
-    redirect_to root_path
+    redirect_to "/"
+  end
+
+  def create
+    params.require(:email)
+
+    guardian.ensure_can_invite_to_forum!
+
+    if Invite.invite_by_email(params[:email], current_user)
+      render json: success_json
+    else
+      render json: failed_json, status: 422
+    end
   end
 
   def destroy
-    requires_parameter(:email)
+    params.require(:email)
 
     invite = Invite.where(invited_by_id: current_user.id, email: params[:email]).first
     raise Discourse::InvalidParameters.new(:email) if invite.blank?
-    invite.destroy
+    invite.trash!(current_user)
 
     render nothing: true
   end

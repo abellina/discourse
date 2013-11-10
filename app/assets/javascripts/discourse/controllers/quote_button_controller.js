@@ -16,66 +16,78 @@ Discourse.QuoteButtonController = Discourse.Controller.extend({
     $LAB.script(assetPath('defer/html-sanitizer-bundle'));
   },
 
-  // If the buffer is cleared, clear out other state (post)
-  bufferChanged: (function() {
+  /**
+    If the buffer is cleared, clear out other state (post)
+  **/
+  bufferChanged: function() {
     if (this.blank('buffer')) this.set('post', null);
-  }).observes('buffer'),
+  }.observes('buffer'),
 
-  selectText: function(e) {
+  /**
+    Save the currently selected text and displays the
+    "quote reply" button
+
+    @method selectText
+  **/
+  selectText: function(postId) {
     // anonymous users cannot "quote-reply"
-    if (!Discourse.get('currentUser')) return;
-    // there is no need to display the "quote-reply" button if we can't create a post
-    if (!this.get('controllers.topic.content.can_create_post')) return;
+    if (!Discourse.User.current()) return;
+
+    // don't display the "quote-reply" button if we can't create a post
+    if (!this.get('controllers.topic.model.details.can_create_post')) return;
+
+    var selection = window.getSelection();
+    // no selections
+    if (selection.rangeCount === 0) return;
 
     // retrieve the selected range
-    var range = window.getSelection().getRangeAt(0);
-    var cloned = range.cloneRange();
+    var range = selection.getRangeAt(0),
+        cloned = range.cloneRange(),
+        $ancestor = $(range.commonAncestorContainer);
 
-    // do not be present the "quote reply" button if you select text spanning two posts
-    // this basically look for the first "DIV" container...
-    var commonDivAncestorContainer = range.commonAncestorContainer;
-    while (commonDivAncestorContainer.nodeName !== 'DIV') commonDivAncestorContainer = commonDivAncestorContainer.parentNode;
-    // ... and check it has the 'cooked' class (which indicates we're in a post)
-    if (commonDivAncestorContainer.className.indexOf('cooked') === -1) return;
+    if ($ancestor.closest('.cooked').length === 0) {
+      this.set('buffer', '');
+      return;
+    }
 
     var selectedText = Discourse.Utilities.selectedText();
     if (this.get('buffer') === selectedText) return;
-    if (this.get('lastSelected') === selectedText) return;
 
-    this.set('post', e.context);
+    // we need to retrieve the post data from the posts collection in the topic controller
+    var postStream = this.get('controllers.topic.postStream');
+    this.set('post', postStream.findLoadedPost(postId));
     this.set('buffer', selectedText);
 
     // collapse the range at the beginning of the selection
     // (ie. moves the end point to the start point)
     range.collapse(true);
 
-    // create a marker element containing a single invisible character
+    // create a marker element
     var markerElement = document.createElement("span");
+    // containing a single invisible character
     markerElement.appendChild(document.createTextNode("\ufeff"));
-    // insert it at the beginning of our range
+    // and insert it at the beginning of our selection range
     range.insertNode(markerElement);
 
+    // retrieve the position of the market
+    var markerOffset = $(markerElement).offset(),
+        $quoteButton = $('.quote-button');
+
+    // remove the marker
+    markerElement.parentNode.removeChild(markerElement);
+
+    // work around Chrome that would sometimes lose the selection
     var sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(cloned);
 
-    // find marker position (cf. http://www.quirksmode.org/js/findpos.html)
-    var obj = markerElement, left = 0, top = 0;
-    do {
-      left += obj.offsetLeft;
-      top += obj.offsetTop;
-      obj = obj.offsetParent;
-    } while (obj.offsetParent);
-
-    // move the quote button at the beginning of the selection
-    var $quoteButton = $('.quote-button');
-    $quoteButton.css({
-      top: top - $quoteButton.outerHeight() - 5,
-      left: left
+    // move the quote button above the marker
+    Em.run.schedule('afterRender', function() {
+      $quoteButton.offset({
+        top: markerOffset.top - $quoteButton.outerHeight() - 5,
+        left: markerOffset.left
+      });
     });
-
-    // remove the marker
-    markerElement.parentNode.removeChild(markerElement);
   },
 
   /**
@@ -87,10 +99,15 @@ Discourse.QuoteButtonController = Discourse.Controller.extend({
     var post = this.get('post');
     var composerController = this.get('controllers.composer');
     var composerOpts = {
-      post: post,
       action: Discourse.Composer.REPLY,
       draftKey: this.get('post.topic.draft_key')
     };
+
+    if(post.get('post_number') === 1) {
+      composerOpts.topic = post.get("topic");
+    } else {
+      composerOpts.post = post;
+    }
 
     // If the composer is associated with a different post, we don't change it.
     var composerPost = composerController.get('content.post');
@@ -99,16 +116,28 @@ Discourse.QuoteButtonController = Discourse.Controller.extend({
     }
 
     var buffer = this.get('buffer');
-    var quotedText = Discourse.BBCode.buildQuoteBBCode(post, buffer);
-    if (composerController.wouldLoseChanges()) {
+    var quotedText = Discourse.Quote.build(post, buffer);
+    if (composerController.get('content.replyDirty')) {
       composerController.appendText(quotedText);
     } else {
       composerController.open(composerOpts).then(function() {
-        return composerController.appendText(quotedText);
+        composerController.appendText(quotedText);
       });
     }
     this.set('buffer', '');
     return false;
+  },
+
+  /**
+    Deselect the currently selected text
+
+    @method deselectText
+  **/
+  deselectText: function() {
+    // clear selected text
+    window.getSelection().removeAllRanges();
+    // clean up the buffer
+    this.set('buffer', '');
   }
 
 });

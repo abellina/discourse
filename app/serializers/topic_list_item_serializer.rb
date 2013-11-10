@@ -1,19 +1,14 @@
-require_dependency 'pinned_check'
-
 class TopicListItemSerializer < ListableTopicSerializer
 
   attributes :views,
              :like_count,
-             :visible,
-             :pinned,
-             :closed,
-             :archived,
              :starred,
              :has_best_of,
              :archetype,
-             :rank_details
+             :rank_details,
+             :last_poster_username,
+             :category_id
 
-  has_one :category
   has_many :posters, serializer: TopicPosterSerializer, embed: :objects
 
   def starred
@@ -43,20 +38,15 @@ class TopicListItemSerializer < ListableTopicSerializer
   end
 
   def include_rank_details?
-    return false unless object.topic_list.present?
-    return false unless scope.user.present?
-    return false unless scope.user.admin?
-
-    object.topic_list.filter == :hot
+    object.topic_list.try(:has_rank_details?)
   end
 
   def posters
     object.posters || []
   end
 
-  def pinned
-    PinnedCheck.new(object, object.user_data).pinned?
+  def last_poster_username
+    object.posters.find { |poster| poster.user.id == object.last_post_user_id }.try(:user).try(:username)
   end
-
 
 end

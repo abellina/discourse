@@ -31,31 +31,30 @@ PreloadStore = {
     @returns {Ember.Deferred} a promise that will eventually be the object we want.
   **/
   getAndRemove: function(key, finder) {
-    var preloadStore = this;
-    return Ember.Deferred.promise(function(promise) {
-      if (preloadStore.data[key]) {
-        promise.resolve(preloadStore.data[key]);
-        delete preloadStore.data[key];
-      } else {
+    if (this.data[key]) {
+      var promise = Ember.RSVP.resolve(this.data[key]);
+      delete this.data[key];
+      return promise;
+    }
 
-        if (finder) {
-          var result = finder();
+    if (finder) {
+      return Ember.Deferred.promise(function(promise) {
+        var result = finder();
 
-          // If the finder returns a promise, we support that too
-          if (result.then) {
-            result.then(function(result) {
-              return promise.resolve(result);
-            }, function(result) {
-              return promise.reject(result);
-            });
-          } else {
-            promise.resolve(result);
-          }
+        // If the finder returns a promise, we support that too
+        if (result.then) {
+          result.then(function(result) {
+            return promise.resolve(result);
+          }, function(result) {
+            return promise.reject(result);
+          });
         } else {
-          promise.resolve(null);
+          promise.resolve(result);
         }
-      }
-    });
+      });
+    }
+
+    return Ember.RSVP.resolve(null);
   },
 
   /**

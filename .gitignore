@@ -20,8 +20,12 @@ dump.rdb
 /cache
 /coverage/*
 
+/public/assets/*
+
 config/database.yml
 config/redis.yml
+config/discourse.pill
+config/environments/production.rb
 
 # Ignore the default SQLite database and db dumps
 /db/*.sqlite3
@@ -32,6 +36,10 @@ config/redis.yml
 # Ignore all logfiles and tempfiles.
 /log/*.log
 /tmp
+/plugins
+/logfile
+
+/spec/fixtures/plugins/my_plugin/auto_generated
 
 # Ignore Eclipse .project file
 /.project
@@ -77,5 +85,9 @@ chef/tmp/*
 # exclude our git version file for now
 config/version.rb
 
-# ignore the Ruby Version manager (rvm) file
+# ignore the Ruby Version manager (rvm)
 .rvmrc
+.ruby-version
+.ruby-gemset
+.rbenv
+bundler_stubs/*

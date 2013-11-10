@@ -7,17 +7,34 @@
   @module Discourse
 **/
 Discourse.UserInvitedRoute = Discourse.Route.extend({
-
   renderTemplate: function() {
     this.render({ into: 'user', outlet: 'userOutlet' });
   },
 
-  setupController: function(controller) {
-    Discourse.InviteList.findInvitedBy(this.controllerFor('user').get('content')).then(function(invited) {
-      controller.set('content', invited);
+  model: function() {
+    return Discourse.Invite.findInvitedBy(this.modelFor('user'));
+  },
+
+  setupController: function(controller, model) {
+    controller.setProperties({
+      model: model,
+      user: this.controllerFor('user').get('model'),
+      searchTerm: ''
     });
+    this.controllerFor('user').set('indexStream', false);
+  },
+
+  actions: {
+
+    /**
+      Shows the invite modal to invite users to the forum.
+
+      @method showInvite
+    **/
+    showInvite: function() {
+      Discourse.Route.showModal(this, 'invite', Discourse.User.current());
+      this.controllerFor('invite').reset();
+    }
   }
 
 });
-
-
